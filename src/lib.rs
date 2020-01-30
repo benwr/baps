@@ -47,7 +47,7 @@ pub fn factor(p: &[usize]) -> (Vec<usize>, Vec<usize>) {
         pilesizes[pile_index] += 1;
     }
 
-    compress(&mutq);
+    compress(&mut q);
 
     // And now we /could/ figure out the second pile index, but
     // it seems easier to just use some quick group theory, to
@@ -56,17 +56,28 @@ pub fn factor(p: &[usize]) -> (Vec<usize>, Vec<usize>) {
     // q' * q * r = q' * p
     // r = q' * p
 
-    let mut r: Vec<usize> = compose(&invert(&q), &p);
+    let r: Vec<usize> = compose(&invert(&q), &p);
     (q, r)
 }
 
 pub fn compress(p: &mut[usize]) {
+    // TODO figure out how to compress nicely, ideally without using a map
+    // I guess you could just do the n^2 thing; usually the numbers are pretty
+    // small anyway.
 }
 
 pub fn invert(p: &[usize]) -> Vec<usize> {
-    vec!()
+    let mut inv = vec![0; p.len()];
+    for i in 0..p.len() {
+        inv[p[i]] = i;
+    }
+    inv
 }
 
 pub fn compose(p: &[usize], q: &[usize]) -> Vec<usize> {
-    vec!()
+    let mut res = vec![];
+    for i in 0..p.len() {
+        res.push(q[p[i]]);
+    }
+    res
 }
