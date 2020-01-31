@@ -17,37 +17,57 @@ pub mod baps {
 
     pub fn factor(p: &[usize]) -> (Vec<usize>, Vec<usize>) {
         let npiles: usize = (p.len() as f64).sqrt().ceil() as usize;
-        let mut q: Vec<usize> = vec![];
 
-        // This part is where the fuckups are likely to happen.
-        // Things I think I'm likely to fuck up:
-        //   - when you're actually shuffling, you draw from
-        //       the top of the deck, while I think this code
-        //       assumes you draw from the bottom of the deck
-        //   - this code is based on an underlying assumption
-        //       that p.len() is a perfect square. If that's
-        //       not true, I think there's some annoying stuff
-        //       about ensuring that everything is still fine.
-        //   - furthermore, if I later want to give the user the
-        //       ability to give any overestimate of the number
-        //       of cards in the deck (so they don't have to
-        //       count them), and then modify the second
-        //       permutation to account for the smaller deck,
-        //       is that still uniformly chosen?
-        //   - I feel gross about this whole "compression" deal.
-        //       what's really going on there?
+        // TODO: if I later want to give the user the
+        // ability to give any overestimate of the number
+        // of cards in the deck (so they don't have to
+        // count them), and then modify the second
+        // permutation to account for the smaller deck,
+        // is that still uniformly chosen?
 
-        let mut pilesizes = vec![0; npiles];
+
+        // Where should a card go in the first permutation?
+        // Well, assume we have npiles piles in each round,
+        // each with npiles or npiles-1 cards.
+        //
+        // The 0th card (top of the initial deck) is going to
+        // be p(0) from the top in the final deck. And our
+        // general strategy is "arrange the intermediate deck
+        // such that there are npiles clusters, each with
+        // at most one card for each pile, and such that you
+        // build the second piles from the bottom up". So,
+        // the card needs to end up in the cluster
+        // corresponding to its index's low-order bits.
+        // That is, it needs to go in the pile corresponding
+        // to its _position_ in pile in the second round.
+        // So, what's it's position in the second round?
+        // ASsume we always stack 0th to npileth piles
+        // top-to-bottom. So if p(card) = 0 (mod npile),
+        // then the card needs to go in the npile-1th pile,
+        // so that it can be stacked on top in the second
+        // round. But if p(card) = -1 (mod npile), then it
+        // needs to be at the bottom of its chunk, and so
+        // in the first round it needs to end up in pile 0.
+
+        // This code does everything very literally; I suspect
+        // that you could instead do this with math, but also
+        // I think this is sufficient, and it was easier to
+        // write.
+        let mut piles = vec![vec![]; npiles];
 
         for i in 0..p.len() {
-            let pile_index = p[i] % npiles;
-            q.push(pile_index * npiles + pilesizes[pile_index]);
-            pilesizes[pile_index] += 1;
+            let pile_index = npiles - 1 - p[i] % npiles;
+            piles[pile_index].push(i)
         }
 
-        debug_assert!(is_compressible(&q));
-        compress(&mut q);
-        debug_assert!(is_permutation(&q));
+        let mut q: Vec<usize> = vec![0; p.len()];
+        let mut count = 0;
+        for pile in piles.iter() {
+            for c in pile.iter().rev() {
+                q[*c] = count;
+                count += 1
+            }
+        }
 
         // And now we /could/ figure out the second pile index, but
         // it seems easier to just use some quick group theory, to
@@ -58,31 +78,6 @@ pub mod baps {
 
         let r: Vec<usize> = compose(&invert(&q), &p);
         (q, r)
-    }
-
-    // given the first part of a permutation on some larger set,
-    // turn it into a permutation on the smaller set instead, by
-    // taking out any gaps in the permutation.
-    pub fn compress(p: &mut[usize]) {
-        let mut p_sorted: Vec<(usize, usize)> = vec![];
-        for (i, elem) in p.iter().enumerate() {
-            p_sorted.push((*elem, i));
-        }
-        p_sorted.sort();
-
-        let sorted_firsts: Vec<usize> = p_sorted.iter().map(|x| x.0).collect();
-
-        debug_assert!(is_compressible(&sorted_firsts));
-        debug_assert!(sorted_firsts.is_sorted());
-
-        for i in 0..p_sorted.len() {
-            let (pj, j) = p_sorted[p_sorted.len() - 1 - i];
-            if pj > p_sorted.len() - i - 1 {
-                p[j] = p_sorted.len() - i - 1;
-            } else {
-                break;
-            }
-        }
     }
 
     pub fn invert(p: &[usize]) -> Vec<usize> {
@@ -106,7 +101,9 @@ pub mod baps {
         for i in p.iter() {
             let mut found_pile = false;
             for pile in piles.iter_mut() {
-                if i > &0 && pile.last() == Some(&(i - 1)) {
+                if pile.last() == Some(&(i + 1)) {
+                    // note: i + 1 because we're stacking bottom to top, but the top card is the
+                    // smallest.
                     pile.push(*i);
                     found_pile = true;
                 }
@@ -116,30 +113,6 @@ pub mod baps {
             }
         }
         piles.len()
-    }
-
-    fn is_compressible(p: &[usize]) -> bool {
-        let mut p_sorted: Vec<usize> = vec![0; p.len()];
-        p_sorted.clone_from_slice(p);
-        p_sorted.sort();
-        for i in 0..p_sorted.len() - 1 {
-            if p_sorted[i] == p_sorted[i + 1] {
-                return false;
-            }
-        }
-        true
-    }
-
-    fn is_permutation(p: &[usize]) -> bool {
-        let mut p_sorted: Vec<usize> = vec![0; p.len()];
-        p_sorted.clone_from_slice(p);
-        p_sorted.sort();
-        for i in 0..p_sorted.len() {
-            if i != p_sorted[i] {
-                return false;
-            }
-        }
-        true
     }
 }
 
@@ -154,7 +127,7 @@ mod tests {
     #[test]
     fn it_works() {
         let mut rng = thread_rng();
-        for i in 5..1000 {
+        for i in 5..2000 {
             let p = random_permutation(&mut rng, i);
             let (q, r) = factor(&p);
             let npiles = (p.len() as f64).sqrt().ceil() as usize;
