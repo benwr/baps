@@ -9,3 +9,11 @@ edition = "2018"
 [dependencies]
 rand = "0.7.3"
 more-asserts = "0.2.1"
+
+[lib]
+name = "baps"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bapscli"
+path = "src/bin.rs"
